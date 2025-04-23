@@ -1,9 +1,14 @@
-from sqlalchemy import func, desc
+from sqlalchemy import func, desc, Numeric
 from sqlalchemy.orm import sessionmaker
 from models import Student, Teacher, Group, Subject, Grade
 from sqlalchemy import create_engine
+import os
+from dotenv import load_dotenv
 
-DB_URL = 'postgresql+psycopg2://postgres:303010@localhost:5432/postgres'
+# Завантаження змінних середовища (якщо є .env)
+load_dotenv()
+
+DB_URL = os.getenv('DB_URL', 'postgresql+psycopg2://postgres:yourpassword@localhost:5432/postgres')
 engine = create_engine(DB_URL)
 Session = sessionmaker(bind=engine)
 
@@ -11,7 +16,7 @@ def select_1():
     # 5 студентів із найбільшим середнім балом з усіх предметів
     session = Session()
     result = (
-        session.query(Student.fullname, func.round(func.avg(Grade.grade), 2).label('avg_grade'))
+        session.query(Student.fullname, func.round(func.avg(Grade.grade).cast(Numeric), 2).label('avg_grade'))
         .join(Grade)
         .group_by(Student.id)
         .order_by(desc('avg_grade'))
@@ -25,7 +30,7 @@ def select_2(subject_id):
     # Студент із найвищим середнім балом з певного предмета
     session = Session()
     result = (
-        session.query(Student.fullname, func.round(func.avg(Grade.grade), 2).label('avg_grade'))
+        session.query(Student.fullname, func.round(func.avg(Grade.grade).cast(Numeric), 2).label('avg_grade'))
         .join(Grade)
         .filter(Grade.subject_id == subject_id)
         .group_by(Student.id)
@@ -39,7 +44,10 @@ def select_3(subject_id):
     # Середній бал у групах з певного предмета
     session = Session()
     result = (
-        session.query(Group.name, func.round(func.avg(Grade.grade), 2).label('avg_grade'))
+        session.query(
+            Group.name,
+            func.round(func.avg(Grade.grade).cast(Numeric), 2).label('avg_grade')
+        )
         .join(Student, Student.group_id == Group.id)
         .join(Grade, Grade.student_id == Student.id)
         .filter(Grade.subject_id == subject_id)
@@ -52,7 +60,7 @@ def select_3(subject_id):
 def select_4():
     # Середній бал на потоці (по всій таблиці оцінок)
     session = Session()
-    result = session.query(func.round(func.avg(Grade.grade), 2)).scalar()
+    result = session.query(func.round(func.avg(Grade.grade).cast(Numeric), 2)).scalar()
     session.close()
     return result
 
@@ -94,7 +102,7 @@ def select_8(teacher_id):
     # Середній бал, який ставить певний викладач зі своїх предметів
     session = Session()
     result = (
-        session.query(func.round(func.avg(Grade.grade), 2))
+        session.query(func.round(func.avg(Grade.grade).cast(Numeric), 2))
         .join(Subject, Grade.subject_id == Subject.id)
         .filter(Subject.teacher_id == teacher_id)
         .scalar()
@@ -115,14 +123,13 @@ def select_9(student_id):
     session.close()
     return result
 
-def select_10(student_id, teacher_id):
-    # Курси, які певному студенту читає певний викладач
+def select_10(student_id, subject_id):
+    # Оценки студента по предмету
     session = Session()
     result = (
-        session.query(Subject.name)
-        .join(Grade, Grade.subject_id == Subject.id)
-        .filter(Grade.student_id == student_id, Subject.teacher_id == teacher_id)
-        .distinct()
+        session.query(Grade.grade, Grade.date_received)
+        .filter(Grade.student_id == student_id, Grade.subject_id == subject_id)
+        .order_by(Grade.date_received)
         .all()
     )
     session.close()
